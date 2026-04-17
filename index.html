@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Walk Tab Game</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root { --bg: #0a0a0a; --acc: #00ff88; --card: #151515; --text: #fff; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .header { padding: 15px; text-align: center; border-bottom: 1px solid #222; }
+        .balance { font-size: 38px; font-weight: bold; color: var(--acc); text-shadow: 0 0 10px var(--acc); }
+        .screen { display: none; flex-grow: 1; flex-direction: column; align-items: center; padding: 15px; overflow-y: auto; padding-bottom: 80px; }
+        .active { display: flex; }
+        
+        /* Кнопка кликера */
+        .btn-container { flex-grow: 1; display: flex; align-items: center; justify-content: center; width: 100%; }
+        .circle { width: 220px; height: 220px; background: radial-gradient(circle, #222, #000); border: 5px solid var(--acc); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 80px; box-shadow: 0 0 30px rgba(0,255,136,0.3); transition: 0.1s; cursor: pointer; }
+        .circle:active { transform: scale(0.92); }
+
+        /* Карточки */
+        .item { background: var(--card); width: 95%; padding: 12px; margin: 8px 0; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
+        .buy-btn { background: var(--acc); color: #000; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; }
+        
+        /* Навигация */
+        .nav { position: fixed; bottom: 0; width: 100%; background: #111; display: flex; justify-content: space-around; padding: 12px 0; border-top: 1px solid #333; }
+        .nav-btn { font-size: 11px; opacity: 0.5; text-align: center; cursor: pointer; }
+        .nav-btn.active { opacity: 1; color: var(--acc); }
+
+        input { background: #222; border: 1px solid var(--acc); color: #fff; padding: 10px; border-radius: 8px; width: 80%; margin-bottom: 10px; }
+        .list-item { width: 95%; display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #222; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="balance" id="bal">0</div>
+    <div style="font-size: 12px; opacity: 0.6;">Прибыль за клик: +<span id="pwr">1</span></div>
+</div>
+
+<div id="s-game" class="screen active">
+    <div class="btn-container">
+        <div class="circle" id="tap">👟</div>
+    </div>
+</div>
+
+<div id="s-shop" class="screen">
+    <h3>Прокачка</h3>
+    <div class="item"><div><b>Сила клика</b><br><small id="c-cost">Цена: 100</small></div><button class="buy-btn" onclick="buyUpg()">Улучшить</button></div>
+    <h3>Скины</h3>
+    <div class="item"><div>🔥 Fire Shoes<br><small>Цена: 500</small></div><button class="buy-btn" onclick="buySkin('🔥', 500)">Взять</button></div>
+    <div class="item"><div>⚡ Flash Speed<br><small>Цена: 2000</small></div><button class="buy-btn" onclick="buySkin('⚡', 2000)">Взять</button></div>
+</div>
+
+<div id="s-top" class="screen">
+    <h3>Мировой Рейтинг</h3>
+    <div id="top-list" style="width:100%"></div>
+</div>
+
+<div id="s-clans" class="screen">
+    <h3>Кланы</h3>
+    <input type="text" id="clan-in" placeholder="Введите название...">
+    <button class="buy-btn" onclick="joinClan()">Вступить в клан</button>
+    <div id="my-clan" style="margin-top: 20px; color: var(--acc);"></div>
+</div>
+
+<div id="s-ref" class="screen">
+    <h3>Рефералы</h3>
+    <div class="item" style="text-align: center; display: block;">
+        <p>+5,000 за друга!</p>
+        <button class="buy-btn" onclick="invite()">Пригласить</button>
+    </div>
+</div>
+
+<div class="nav">
+    <div class="nav-btn active" onclick="tab('s-game', this)">🎮<br>Игра</div>
+    <div class="nav-btn" onclick="tab('s-shop', this)">🛒<br>Магазин</div>
+    <div class="nav-btn" onclick="tab('s-top', this); renderTop()">🏆<br>Топ</div>
+    <div class="nav-btn" onclick="tab('s-clans', this)">🛡<br>Кланы</div>
+    <div class="nav-btn" onclick="tab('s-ref', this)">👥<br>Друзья</div>
+</div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    let score = parseInt(localStorage.getItem('sc')) || 0;
+    let power = parseInt(localStorage.getItem('pw')) || 1;
+    let cost = parseInt(localStorage.getItem('cs')) || 100;
+    let skin = localStorage.getItem('sk') || '👟';
+    let clan = localStorage.getItem('cl') || 'Нет клана';
+
+    function save() {
+        localStorage.setItem('sc', score); localStorage.setItem('pw', power);
+        localStorage.setItem('cs', cost); localStorage.setItem('sk', skin);
+        localStorage.setItem('cl', clan);
+        document.getElementById('bal').innerText = score.toLocaleString();
+        document.getElementById('pwr').innerText = power;
+        document.getElementById('c-cost').innerText = "Цена: " + cost;
+        document.getElementById('tap').innerText = skin;
+        document.getElementById('my-clan').innerText = "Ваш клан: " + clan;
+    }
+
+    document.getElementById('tap').addEventListener('click', (e) => {
+        score += power;
+        save();
+        tg.HapticFeedback.impactOccurred('light');
+    });
+
+    function buyUpg() {
+        if(score >= cost) { score -= cost; power++; cost *= 2; save(); }
+        else { tg.showAlert("Мало монет!"); }
+    }
+
+    function buySkin(s, p) {
+        if(score >= p) { score -= p; skin = s; save(); }
+        else { tg.showAlert("Мало монет!"); }
+    }
+
+    function joinClan() {
+        let name = document.getElementById('clan-in').value;
+        if(name) { clan = name; save(); tg.showAlert("Вы вступили в клан " + name); }
+    }
+
+    function invite() {
+        const link = "https://t.me/WalkTap_Bot?start=ref" + (tg.initDataUnsafe.user?.id || '123');
+        tg.openTelegramLink("https://t.me/share/url?url=" + encodeURIComponent(link) + "&text=Заходи в Walk Tab!");
+    }
+
+    function tab(id, el) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        el.classList.add('active');
+    }
+
+    function renderTop() {
+        const list = document.getElementById('top-list');
+        list.innerHTML = "";
+        const fakeTop = [
+            {n: "Алексей (Админ)", s: 999999},
+            {n: "CryptoKing", s: 850000},
+            {n: "WalkMaster", s: 720000},
+            {n: tg.initDataUnsafe.user?.first_name || "Вы", s: score}
+        ].sort((a,b) => b.s - a.s);
+        
+        fakeTop.forEach((u, i) => {
+            list.innerHTML += `<div class="list-item"><span>${i+1}. ${u.n}</span><b>${u.s.toLocaleString()}</b></div>`;
+        });
+    }
+
+    save();
+</script>
+</body>
+</html>
